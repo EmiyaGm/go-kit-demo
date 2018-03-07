@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package pb;
+
+// The Add service definition.
+service Add {
+    // Uppercase 1 string.
+    rpc Uppercase (UppercaseRequest) returns (UppercaseReply) {}
+
+}
+
+message UppercaseRequest {
+    string s = 1;
+}
+
+message UppercaseReply {
+    int64 v = 1;
+    string err = 2;
+}
