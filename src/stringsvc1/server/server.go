@@ -9,6 +9,7 @@ import (
 
 	pb "stringsvc1/pb"
 	"google.golang.org/grpc"
+	"strings"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 type stringSvcServer struct {}
 
 func (s *stringSvcServer) Uppercase(ctx context.Context,in *pb.UppercaseRequest) (*pb.UppercaseReply, error) {
-	return &pb.UppercaseReply{V:1}, nil
+	return &pb.UppercaseReply{V:strings.ToUpper(in.S)}, nil
 }
 
 func main() {
