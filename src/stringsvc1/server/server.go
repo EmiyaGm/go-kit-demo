@@ -7,7 +7,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/reflection"
 
-	pb "stringsvc1/pb"
+	pb "stringsvc1/pb/stringsvc"
 	"google.golang.org/grpc"
 	"strings"
 )

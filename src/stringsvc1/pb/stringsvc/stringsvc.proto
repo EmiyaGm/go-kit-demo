@@ -2,10 +2,17 @@ syntax = "proto3";
 
 package pb;
 
+import "google/api/annotations.proto";
+
 // The Add service definition.
 service Add {
     // Uppercase 1 string.
-    rpc Uppercase (UppercaseRequest) returns (UppercaseReply) {}
+    rpc Uppercase (UppercaseRequest) returns (UppercaseReply) {
+        option (google.api.http) = {
+            post: "/example/echo"
+            body: "*"
+        };
+    }
 
 }
 

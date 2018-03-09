@@ -19,7 +19,7 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 
-	"stringsvc1/pb"
+	"stringsvc1/pb/stringsvc"
 	"stringsvc1/uppercaseendpoint"
 	"stringsvc1/service"
 )

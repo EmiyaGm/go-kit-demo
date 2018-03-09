@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 
-	pb "stringsvc1/pb"
+	pb "stringsvc1/pb/stringsvc"
 	"stringsvc1/uppercaseendpoint"
 	"stringsvc1/service"
 	"stringsvc1/transport"

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	pb "stringsvc1/pb"
+	pb "stringsvc1/pb/stringsvc"
 )
 
 const (
