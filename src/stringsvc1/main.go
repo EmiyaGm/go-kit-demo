@@ -17,7 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 
 	pb "stringsvc1/pb/stringsvc"
-	"stringsvc1/uppercaseendpoint"
+	"stringsvc1/svcendpoint"
 	"stringsvc1/service"
 	"stringsvc1/transport"
 
@@ -58,7 +58,7 @@ func main() {
 	// them to ports or anything yet; we'll do that next.
 	var (
 		service        = service.New()
-		endpoints      = uppercaseendpoint.New(service, tracer)
+		endpoints      = svcendpoint.New(service, tracer)
 		httpHandler    = transport.NewHTTPHandler(endpoints, tracer, logger)
 		grpcServer     = transport.NewGRPCServer(endpoints, tracer, logger)
 	)

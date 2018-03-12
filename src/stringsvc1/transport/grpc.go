@@ -20,16 +20,17 @@ import (
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 
 	"stringsvc1/pb/stringsvc"
-	"stringsvc1/uppercaseendpoint"
+	"stringsvc1/svcendpoint"
 	"stringsvc1/service"
 )
 
 type grpcServer struct {
 	uppercase    grpctransport.Handler
+	create grpctransport.Handler
 }
 
 // NewGRPCServer makes a set of endpoints available as a gRPC AddServer.
-func NewGRPCServer(endpoints uppercaseendpoint.Set, tracer stdopentracing.Tracer, logger log.Logger) pb.AddServer {
+func NewGRPCServer(endpoints svcendpoint.Set, tracer stdopentracing.Tracer, logger log.Logger) pb.AddServer {
 	options := []grpctransport.ServerOption{
 		grpctransport.ServerErrorLogger(logger),
 	}
@@ -40,6 +41,12 @@ func NewGRPCServer(endpoints uppercaseendpoint.Set, tracer stdopentracing.Tracer
 			encodeGRPCUppercaseResponse,
 			append(options, grpctransport.ServerBefore(opentracing.GRPCToContext(tracer, "Uppercase", logger)))...,
 		),
+		create: grpctransport.NewServer(
+			endpoints.CreateEndpoint,
+			decodeGRPCCreateRequest,
+			encodeGRPCCreateResponse,
+			append(options, grpctransport.ServerBefore(opentracing.GRPCToContext(tracer, "Create", logger)))...,
+		),
 	}
 }
 
@@ -49,6 +56,14 @@ func (s *grpcServer) Uppercase(ctx oldcontext.Context, req *pb.UppercaseRequest)
 		return nil, err
 	}
 	return rep.(*pb.UppercaseReply), nil
+}
+
+func (s *grpcServer) Create(ctx oldcontext.Context, req *pb.CreateRequest) (*pb.CreateReply, error) {
+	_, rep, err := s.create.ServeGRPC(ctx, req)
+	if err != nil{
+		return nil, err
+	}
+	return rep.(*pb.CreateReply), nil
 }
 
 // NewGRPCClient returns an AddService backed by a gRPC server at the other end
@@ -86,14 +101,34 @@ func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger l
 		}))(uppercaseEndpoint)
 	}
 
+	var createEndpoint endpoint.Endpoint
+	{
+		createEndpoint = grpctransport.NewClient(
+			conn,
+			"pb.Add",
+			"Create",
+			encodeGRPCCreateRequest,
+			decodeGRPCCreateResponse,
+			pb.CreateReply{},
+			grpctransport.ClientBefore(opentracing.ContextToGRPC(tracer, logger)),
+		).Endpoint()
+		createEndpoint = opentracing.TraceClient(tracer, "Create")(createEndpoint)
+		createEndpoint = limiter(createEndpoint)
+		createEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{
+			Name:    "Create",
+			Timeout: 30 * time.Second,
+		}))(createEndpoint)
+	}
+
 	// The Concat endpoint is the same thing, with slightly different
 	// middlewares to demonstrate how to specialize per-endpoint.
 
 	// Returning the endpoint.Set as a service.Service relies on the
 	// endpoint.Set implementing the Service methods. That's just a simple bit
 	// of glue code.
-	return uppercaseendpoint.Set{
+	return svcendpoint.Set{
 		UppercaseEndpoint:    uppercaseEndpoint,
+		CreateEndpoint:       createEndpoint,
 	}
 }
 
@@ -101,7 +136,7 @@ func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger l
 // gRPC uppercase request to a user-domain uppercase request. Primarily useful in a server.
 func decodeGRPCUppercaseRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*pb.UppercaseRequest)
-	return uppercaseendpoint.UppercaseRequest{A: string(req.S)}, nil
+	return svcendpoint.UppercaseRequest{A: string(req.S)}, nil
 }
 
 
@@ -109,7 +144,7 @@ func decodeGRPCUppercaseRequest(_ context.Context, grpcReq interface{}) (interfa
 // gRPC uppercase reply to a user-domain uppercase response. Primarily useful in a client.
 func decodeGRPCUppercaseResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
 	reply := grpcReply.(*pb.UppercaseReply)
-	return uppercaseendpoint.UppercaseResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
+	return svcendpoint.UppercaseResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
 }
 
 
@@ -117,15 +152,45 @@ func decodeGRPCUppercaseResponse(_ context.Context, grpcReply interface{}) (inte
 // encodeGRPCUppercaseResponse is a transport/grpc.EncodeResponseFunc that converts a
 // user-domain uppercase response to a gRPC uppercase reply. Primarily useful in a server.
 func encodeGRPCUppercaseResponse(_ context.Context, response interface{}) (interface{}, error) {
-	resp := response.(uppercaseendpoint.UppercaseResponse)
+	resp := response.(svcendpoint.UppercaseResponse)
 	return &pb.UppercaseReply{V: string(resp.V), Err: err2str(resp.Err)}, nil
 }
 
 // encodeGRPCUppercaseRequest is a transport/grpc.EncodeRequestFunc that converts a
 // user-domain uppercase request to a gRPC uppercase request. Primarily useful in a client.
 func encodeGRPCUppercaseRequest(_ context.Context, request interface{}) (interface{}, error) {
-	req := request.(uppercaseendpoint.UppercaseRequest)
+	req := request.(svcendpoint.UppercaseRequest)
 	return &pb.UppercaseRequest{S: string(req.A)}, nil
+}
+
+
+func decodeGRPCCreateRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
+	req := grpcReq.(*pb.CreateRequest)
+	return svcendpoint.CreateRequest{A: string(req.S)}, nil
+}
+
+
+// decodeGRPCUppercaseResponse is a transport/grpc.DecodeResponseFunc that converts a
+// gRPC uppercase reply to a user-domain uppercase response. Primarily useful in a client.
+func decodeGRPCCreateResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*pb.CreateReply)
+	return svcendpoint.CreateResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
+}
+
+
+
+// encodeGRPCUppercaseResponse is a transport/grpc.EncodeResponseFunc that converts a
+// user-domain uppercase response to a gRPC uppercase reply. Primarily useful in a server.
+func encodeGRPCCreateResponse(_ context.Context, response interface{}) (interface{}, error) {
+	resp := response.(svcendpoint.CreateResponse)
+	return &pb.CreateReply{V: string(resp.V), Err: err2str(resp.Err)}, nil
+}
+
+// encodeGRPCUppercaseRequest is a transport/grpc.EncodeRequestFunc that converts a
+// user-domain uppercase request to a gRPC uppercase request. Primarily useful in a client.
+func encodeGRPCCreateRequest(_ context.Context, request interface{}) (interface{}, error) {
+	req := request.(svcendpoint.CreateRequest)
+	return &pb.CreateRequest{ID: string(req.A)}, nil
 }
 
 

@@ -14,6 +14,10 @@ service Add {
         };
     }
 
+    // create 更新报警记录
+    rpc create (createRequest) returns (createReply){}
+
+
 }
 
 message UppercaseRequest {
@@ -21,6 +25,18 @@ message UppercaseRequest {
 }
 
 message UppercaseReply {
+    string v = 1;
+    string err = 2;
+}
+
+message createRequest {
+    string ID = 1;
+    uint32 FlowID = 2;
+    string Source = 3;
+    string Type = 4;
+}
+
+message createReply {
     string v = 1;
     string err = 2;
 }

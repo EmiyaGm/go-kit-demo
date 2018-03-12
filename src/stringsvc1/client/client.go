@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	address     = "localhost:8082"
+	address     = "localhost:8080"
 	defaultName = "Uppercase"
 )
 
@@ -33,4 +33,10 @@ func main() {
 		log.Fatalf("could not greet: %v", err)
 	}
 	log.Printf("Uppercase: %s", r.V)
+
+	r2, err := c.Create(context.Background(), &pb.CreateRequest{ID:"gmtest",FlowID:1234,Source:"testSource",Type:"testType"})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Create: %s", r2.V)
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"fmt"
 )
 
 // Service describes a service that adds things together.
 type Service interface {
 	Uppercase(ctx context.Context, a string) (string, error)
+	Create(ctx context.Context, ID string, FlowID uint32, Source string, Type string) (error)
 }
 
 // New returns a basic Service with all of the expected middlewares wired in.
@@ -44,4 +46,9 @@ type basicService struct{}
 
 func (s basicService) Uppercase(_ context.Context, a string) (string, error) {
 	return strings.ToUpper(a), nil
+}
+
+func (s basicService) Create(_ context.Context, ID string, FlowID uint32, Source string, Type string) error{
+	fmt.Print("get alarm data")
+	return nil
 }

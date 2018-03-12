@@ -22,6 +22,10 @@ func (s *stringSvcServer) Uppercase(ctx context.Context,in *pb.UppercaseRequest)
 	return &pb.UppercaseReply{V:strings.ToUpper(in.S)}, nil
 }
 
+func (s *stringSvcServer) Create(ctx context.Context,in *pb.CreateRequest) (*pb.CreateReply , error){
+	return &pb.CreateReply{V:"create alarm data"}, nil
+}
+
 func main() {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {

@@ -23,13 +23,13 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 	httptransport "github.com/go-kit/kit/transport/http"
 
-	"stringsvc1/uppercaseendpoint"
+	"stringsvc1/svcendpoint"
 	"stringsvc1/service"
 )
 
 // NewHTTPHandler returns an HTTP handler that makes a set of endpoints
 // available on predefined paths.
-func NewHTTPHandler(endpoints uppercaseendpoint.Set, tracer stdopentracing.Tracer, logger log.Logger) http.Handler {
+func NewHTTPHandler(endpoints endpoint.Set, tracer stdopentracing.Tracer, logger log.Logger) http.Handler {
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorEncoder(errorEncoder),
 		httptransport.ServerErrorLogger(logger),
@@ -90,7 +90,7 @@ func NewHTTPClient(instance string, tracer stdopentracing.Tracer, logger log.Log
 	// Returning the endpoint.Set as a service.Service relies on the
 	// endpoint.Set implementing the Service methods. That's just a simple bit
 	// of glue code.
-	return uppercaseendpoint.Set{
+	return endpoint.Set{
 		UppercaseEndpoint:    uppercaseEndpoint,
 	}, nil
 }
@@ -130,7 +130,7 @@ type errorWrapper struct {
 // JSON-encoded sum request from the HTTP request body. Primarily useful in a
 // server.
 func decodeHTTPUppercaseRequest(_ context.Context, r *http.Request) (interface{}, error) {
-	var req uppercaseendpoint.UppercaseRequest
+	var req endpoint.UppercaseRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	return req, err
 }
@@ -144,7 +144,7 @@ func decodeHTTPUppercaseResponse(_ context.Context, r *http.Response) (interface
 	if r.StatusCode != http.StatusOK {
 		return nil, errors.New(r.Status)
 	}
-	var resp uppercaseendpoint.UppercaseResponse
+	var resp endpoint.UppercaseResponse
 	err := json.NewDecoder(r.Body).Decode(&resp)
 	return resp, err
 }
@@ -164,7 +164,7 @@ func encodeHTTPGenericRequest(_ context.Context, r *http.Request, request interf
 // encodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
 func encodeHTTPGenericResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	if f, ok := response.(uppercaseendpoint.Failer); ok && f.Failed() != nil {
+	if f, ok := response.(endpoint.Failer); ok && f.Failed() != nil {
 		errorEncoder(ctx, f.Failed(), w)
 		return nil
 	}

@@ -1,4 +1,4 @@
-package uppercaseendpoint
+package svcendpoint
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 
 	"stringsvc1/service"
+	"fmt"
 )
 
 // Set collects all of the endpoints that compose an add service. It's meant to
@@ -22,6 +23,7 @@ import (
 // parameter.
 type Set struct {
 	UppercaseEndpoint    endpoint.Endpoint
+	CreateEndpoint    endpoint.Endpoint
 }
 
 // New returns a Set that wraps the provided server, and wires in all of the
@@ -32,10 +34,18 @@ func New(svc service.Service, trace stdopentracing.Tracer) Set {
 		uppercaseEndpoint = MakeUppercaseEndpoint(svc)
 		uppercaseEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(uppercaseEndpoint)
 		uppercaseEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(uppercaseEndpoint)
-		uppercaseEndpoint = opentracing.TraceServer(trace, "Sum")(uppercaseEndpoint)
+		uppercaseEndpoint = opentracing.TraceServer(trace, "Uppercase")(uppercaseEndpoint)
+	}
+	var createEndpoint endpoint.Endpoint
+	{
+		createEndpoint = MakeCreateEndpoint(svc)
+		createEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(createEndpoint)
+		createEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(createEndpoint)
+		createEndpoint = opentracing.TraceServer(trace, "Uppercase")(createEndpoint)
 	}
 	return Set{
 		UppercaseEndpoint:    uppercaseEndpoint,
+		CreateEndpoint:    createEndpoint,
 	}
 }
 
@@ -47,6 +57,16 @@ func (s Set) Uppercase(ctx context.Context, a string) (string, error) {
 		return "", err
 	}
 	response := resp.(UppercaseResponse)
+	return response.V, response.Err
+}
+
+func (s Set) Create(ctx context.Context, ID string, FlowID uint32, Source string, Type string) (string, error){
+	fmt.Print("create alarm data")
+	resp, err := s.CreateEndpoint(ctx, createRequest{ID: ID,FlowID: FlowID,Source: Source,Type: Type})
+	if err != nil {
+		return "", err
+	}
+	response := resp.(createResponse)
 	return response.V, response.Err
 }
 
@@ -63,6 +83,13 @@ func MakeUppercaseEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
+func MakeCreateEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(createRequest)
+		err = s.Create(ctx, req.ID, req.FlowID, req.Source, req.Type)
+		return createResponse{V:"create alarm data", Err: err}, nil
+	}
+}
 
 // Failer is an interface that should be implemented by response types.
 // Response encoders can check if responses are Failer, and if so if they've
@@ -84,3 +111,19 @@ type UppercaseResponse struct {
 
 // Failed implements Failer.
 func (r UppercaseResponse) Failed() error { return r.Err }
+
+type createRequest struct {
+	ID string `json:"ID"`
+	FlowID uint32 `json:"FlowID"`
+	Source string `json:"Source"`
+	Type string `json:"Type"`
+}
+
+// SumResponse collects the response values for the Sum method.
+type createResponse struct {
+	V   string   `json:"v"`
+	Err error `json:"-"` // should be intercepted by Failed/errorEncoder
+}
+
+// Failed implements Failer.
+func (r createResponse) Failed() error { return r.Err }

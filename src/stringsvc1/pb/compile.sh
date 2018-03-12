@@ -11,8 +11,8 @@
 # See also
 #  https://github.com/grpc/grpc-go/tree/master/examples
 
-protoc -I . --go_out=plugins=grpc,Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor:. google/api/*.proto
+#protoc -I . --go_out=plugins=grpc,Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor:. google/api/*.proto
 
 protoc stringsvc/stringsvc.proto --go_out=plugins=grpc:.
 
-protoc stringsvc/stringsvc.proto --grpc-gateway_out=logtostderr=true:.
+#protoc stringsvc/stringsvc.proto --grpc-gateway_out=logtostderr=true:.
