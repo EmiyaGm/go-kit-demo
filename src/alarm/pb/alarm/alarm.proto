@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package pb;
+
+import "google/api/annotations.proto";
+
+// The Add service definition.
+service Add {
+    // create 更新报警记录
+    rpc create (createRequest) returns (createReply){}
+
+    rpc add (addRequest) returns (addReply){}
+
+    rpc end (endRequest) returns (endReply){}
+
+}
+
+message createRequest {
+    string ID = 1;
+    uint32 FlowID = 2;
+    string Source = 3;
+    string Type = 4;
+    message time{};
+    string Strategy = 5;
+    string Target = 6;
+    string SourceID = 7;
+    message Location{
+        float lng = 1;
+        float lat = 2;
+    };
+    message Data{};
+
+}
+
+message createReply {
+    string v = 1;
+    string err = 2;
+}
+
+message addRequest {
+    string ID = 1;
+    uint32 FlowID = 2;
+    string Source = 3;
+    string Type = 4;
+    message time{};
+    string Strategy = 5;
+    string Target = 6;
+    string SourceID = 7;
+    message Location{
+        float lng = 1;
+        float lat = 2;
+    };
+    message Data{};
+}
+
+message addReply {
+    string v = 1;
+    string err = 2;
+}
+
+message endRequest {
+    string ID = 1;
+    uint32 FlowID = 2;
+    string Source = 3;
+    string Type = 4;
+    message time{};
+    string Strategy = 5;
+    string Target = 6;
+    string SourceID = 7;
+    message Location{
+        float lng = 1;
+        float lat = 2;
+    };
+    message Data{};
+}
+
+message endReply{
+    string v = 1;
+    string err = 2;
+}
