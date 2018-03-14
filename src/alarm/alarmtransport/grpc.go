@@ -1,27 +1,25 @@
-package transport
+package alarmtransport
 
 import (
 	"context"
-	"errors"
-	"time"
-
-	"google.golang.org/grpc"
 
 	stdopentracing "github.com/opentracing/opentracing-go"
-	"github.com/sony/gobreaker"
 	oldcontext "golang.org/x/net/context"
-	"golang.org/x/time/rate"
-
-	"github.com/go-kit/kit/circuitbreaker"
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/ratelimit"
 	"github.com/go-kit/kit/tracing/opentracing"
 	grpctransport "github.com/go-kit/kit/transport/grpc"
 
 	"alarm/pb/alarm"
 	"alarm/alarmendpoint"
-	"alarm/service"
+	"github.com/go-kit/kit/log"
+	"google.golang.org/grpc"
+	"github.com/go-kit/kit/ratelimit"
+	"golang.org/x/time/rate"
+	"time"
+	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/kit/circuitbreaker"
+	"github.com/sony/gobreaker"
+	"alarm/alarmservice"
+	"errors"
 )
 
 type grpcServer struct {
@@ -82,22 +80,10 @@ func (s *grpcServer) End(ctx oldcontext.Context, req *pb.EndRequest) (*pb.EndRep
 	return rep.(*pb.EndReply), nil
 }
 
-// NewGRPCClient returns an AddService backed by a gRPC server at the other end
-// of the conn. The caller is responsible for constructing the conn, and
-// eventually closing the underlying transport. We bake-in certain middlewares,
-// implementing the client library pattern.
-func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger log.Logger) service.Service {
-	// We construct a single ratelimiter middleware, to limit the total outgoing
-	// QPS from this client to all methods on the remote instance. We also
-	// construct per-endpoint circuitbreaker middlewares to demonstrate how
-	// that's done, although they could easily be combined into a single breaker
-	// for the entire remote instance, too.
+
+func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger log.Logger) alarmservice.Service {
 	limiter := ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 100))
 
-	// Each individual endpoint is an http/transport.Client (which implements
-	// endpoint.Endpoint) that gets wrapped with various middlewares. If you
-	// made your own client library, you'd do this work there, so your server
-	// could rely on a consistent set of client behavior.
 	var createEndpoint endpoint.Endpoint
 	{
 		createEndpoint = grpctransport.NewClient(
@@ -117,6 +103,8 @@ func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger l
 		}))(createEndpoint)
 	}
 
+	// The Concat endpoint is the same thing, with slightly different
+	// middlewares to demonstrate how to specialize per-endpoint.
 	var addEndpoint endpoint.Endpoint
 	{
 		addEndpoint = grpctransport.NewClient(
@@ -132,46 +120,49 @@ func NewGRPCClient(conn *grpc.ClientConn, tracer stdopentracing.Tracer, logger l
 		addEndpoint = limiter(addEndpoint)
 		addEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{
 			Name:    "Add",
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		}))(addEndpoint)
 	}
 
 	var endEndpoint endpoint.Endpoint
 	{
-		endEndpoint = grpctransport.NewClient(
+		addEndpoint = grpctransport.NewClient(
 			conn,
 			"pb.Add",
 			"End",
 			encodeGRPCEndRequest,
 			decodeGRPCEndResponse,
-			pb.CreateReply{},
+			pb.AddReply{},
 			grpctransport.ClientBefore(opentracing.ContextToGRPC(tracer, logger)),
 		).Endpoint()
 		endEndpoint = opentracing.TraceClient(tracer, "End")(endEndpoint)
 		endEndpoint = limiter(endEndpoint)
 		endEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{
 			Name:    "End",
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		}))(endEndpoint)
 	}
 
+	// Returning the endpoint.Set as a service.Service relies on the
+	// endpoint.Set implementing the Service methods. That's just a simple bit
+	// of glue code.
 	return alarmendpoint.Set{
-		CreateEndpoint:       createEndpoint,
-		AddEndpoint:          endEndpoint,
-		EndEndpoint:          endEndpoint,
+		CreateEndpoint:    createEndpoint,
+		AddEndpoint: addEndpoint,
+		EndEndpoint: endEndpoint,
 	}
 }
 
+// NewGRPCClient returns an AddService backed by a gRPC server at the other end
+// of the conn. The caller is responsible for constructing the conn, and
+// eventually closing the underlying transport. We bake-in certain middlewares,
+// implementing the client library pattern.
 
 func decodeGRPCCreateRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*pb.CreateRequest)
-	return alarmendpoint.CreateRequest{A: string(req.S)}, nil
+	return alarmendpoint.CreateRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
 }
 
-func decodeGRPCCreateResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(*pb.CreateReply)
-	return alarmendpoint.CreateResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
-}
 
 func encodeGRPCCreateResponse(_ context.Context, response interface{}) (interface{}, error) {
 	resp := response.(alarmendpoint.CreateResponse)
@@ -180,19 +171,20 @@ func encodeGRPCCreateResponse(_ context.Context, response interface{}) (interfac
 
 func encodeGRPCCreateRequest(_ context.Context, request interface{}) (interface{}, error) {
 	req := request.(alarmendpoint.CreateRequest)
-	return &pb.CreateRequest{ID: string(req.A)}, nil
+	return &pb.CreateRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
 }
 
 
 func decodeGRPCAddRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*pb.AddRequest)
-	return alarmendpoint.AddRequest{A: string(req.S)}, nil
+	return alarmendpoint.AddRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
 }
 
-func decodeGRPCAddResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(*pb.AddReply)
-	return alarmendpoint.AddResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
+func decodeGRPCCreateResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*pb.CreateReply)
+	return alarmendpoint.CreateResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
 }
+
 
 func encodeGRPCAddResponse(_ context.Context, response interface{}) (interface{}, error) {
 	resp := response.(alarmendpoint.AddResponse)
@@ -201,18 +193,18 @@ func encodeGRPCAddResponse(_ context.Context, response interface{}) (interface{}
 
 func encodeGRPCAddRequest(_ context.Context, request interface{}) (interface{}, error) {
 	req := request.(alarmendpoint.AddRequest)
-	return &pb.AddRequest{ID: string(req.A)}, nil
+	return &pb.AddRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
+}
+
+func decodeGRPCAddResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*pb.AddReply)
+	return alarmendpoint.AddResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
 }
 
 
 func decodeGRPCEndRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*pb.EndRequest)
-	return alarmendpoint.EndRequest{A: string(req.S)}, nil
-}
-
-func decodeGRPCEndResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
-	reply := grpcReply.(*pb.EndReply)
-	return alarmendpoint.EndResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
+	return alarmendpoint.EndRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
 }
 
 func encodeGRPCEndResponse(_ context.Context, response interface{}) (interface{}, error) {
@@ -222,7 +214,12 @@ func encodeGRPCEndResponse(_ context.Context, response interface{}) (interface{}
 
 func encodeGRPCEndRequest(_ context.Context, request interface{}) (interface{}, error) {
 	req := request.(alarmendpoint.EndRequest)
-	return &pb.EndRequest{ID: string(req.A)}, nil
+	return &pb.EndRequest{ID: string(req.ID),FlowID:uint32(req.FlowID),Source:string(req.Source),Type:string(req.Type),Strategy:string(req.Strategy),Target:string(req.Target),SourceID:string(req.SourceID)}, nil
+}
+
+func decodeGRPCEndResponse(_ context.Context, grpcReply interface{}) (interface{}, error) {
+	reply := grpcReply.(*pb.EndReply)
+	return alarmendpoint.EndResponse{V: string(reply.V), Err: str2err(reply.Err)}, nil
 }
 
 func str2err(s string) error {

@@ -1,55 +1,74 @@
 package main
 
 import (
-	"log"
+	"github.com/go-kit/kit/log"
 	"net"
-
-	"golang.org/x/net/context"
-	"google.golang.org/grpc/reflection"
-
+	"flag"
 	pb "alarm/pb/alarm"
 	"google.golang.org/grpc"
-	mgo "gopkg.in/mgo.v2"
+	stdopentracing "github.com/opentracing/opentracing-go"
+	"alarm/alarmservice"
+	"alarm/alarmtransport"
+	"alarm/alarmendpoint"
+	"os"
+	"fmt"
+	"text/tabwriter"
+	"github.com/oklog/oklog/pkg/group"
 )
 
 const (
 	port = ":8081"
 )
 
-const (
-	collection = "vehicle_warning"
-)
-
-var c *mgo.Collection
-
-type alarmServer struct {}
-
-func (s *alarmServer) Create(ctx context.Context,in *pb.CreateRequest) (*pb.CreateReply , error){
-	return &pb.CreateReply{V:"create alarm data"}, nil
-}
-
-func (s *alarmServer) Add(ctx context.Context,in *pb.AddRequest) (*pb.AddReply , error){
-	return &pb.AddReply{V:"add alarm data"}, nil
-}
-
-func (s *alarmServer) End(ctx context.Context,in *pb.EndRequest) (*pb.EndReply , error){
-	return &pb.EndReply{V:"end alarm data"}, nil
-}
-
 func main() {
-	session, err := mgo.Dial("")
-	db := session.DB("parse_vehicle")
-	c = db.C(collection)
-	lis, err := net.Listen("tcp", port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	fs := flag.NewFlagSet("alarm", flag.ExitOnError)
+	var tracer stdopentracing.Tracer
+	{
+		tracer = stdopentracing.GlobalTracer() // no-op
 	}
-	s := grpc.NewServer()
-	pb.RegisterAddServer(s,&alarmServer{})
-	// Register reflection service on gRPC server.
-	reflection.Register(s)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	var logger log.Logger
+	{
+		logger = log.NewLogfmtLogger(os.Stderr)
+		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+		logger = log.With(logger, "caller", log.DefaultCaller)
+	}
+	var service = alarmservice.New()
+	var endpoints = alarmendpoint.New(service, tracer)
+	var grpcServer = alarmtransport.NewGRPCServer(endpoints, tracer, logger)
+	var grpcAddr = fs.String("grpc-addr", port, "gRPC listen address")
+	var g group.Group
+	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
+	fs.Parse(os.Args[1:])
+	grpcListener, err := net.Listen("tcp", *grpcAddr)
+	if err != nil {
+		logger.Log("transport", "gRPC", "during", "Listen", "err", err)
+		os.Exit(1)
+	}
+	g.Add(func() error {
+		logger.Log("transport", "gRPC", "addr", *grpcAddr)
+		// we add the Go Kit gRPC Interceptor to our gRPC service as it is used by
+		// the here demonstrated zipkin tracing middleware.
+		baseServer := grpc.NewServer()
+		pb.RegisterAddServer(baseServer, grpcServer)
+		return baseServer.Serve(grpcListener)
+	}, func(error) {
+		grpcListener.Close()
+	})
+	logger.Log("exit", g.Run())
+}
+
+func usageFor(fs *flag.FlagSet, short string) func() {
+	return func() {
+		fmt.Fprintf(os.Stderr, "USAGE\n")
+		fmt.Fprintf(os.Stderr, "  %s\n", short)
+		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(os.Stderr, "FLAGS\n")
+		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
+		fs.VisitAll(func(f *flag.Flag) {
+			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
+		})
+		w.Flush()
+		fmt.Fprintf(os.Stderr, "\n")
 	}
 }
 

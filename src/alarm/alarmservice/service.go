@@ -1,9 +1,12 @@
-package service
+package alarmservice
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+	"gopkg.in/mgo.v2/bson"
+	"log"
 )
 
 // Service describes a service that adds things together.
@@ -46,14 +49,60 @@ type basicService struct{}
 
 
 func (s basicService) Create(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+	now := time.Now()
+	data := bson.M{
+		"_id":          ID,
+		"source":       Source,
+		//"location":     m.Location,
+		//"trigger_time": m.Time,
+		"target":       Target,
+		//"status":       defaultStatus,
+		"type":         Type,
+
+		//"_p_vehicle_team":   m.Data["_p_vehicle_team"],
+		//"speed":             m.Data["speed"],
+		//"address":           m.Data["address"],
+		//"_p_vehicle":        m.Data["_p_vehicle"],
+		"_created_at":       now,
+		"server_receive_at": now,
+		//"_p_vehicle_models": m.Data["_p_vehicle_models"],
+		"_updated_at": now,
+		"ids":         []string{SourceID},
+	}
+	if err := dbc.Insert(data); err != nil {
+		log.Println(err)
+	}
 	fmt.Print("create alarm data")
 	return nil
 }
 func (s basicService) Add(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+	now := time.Now()
+	data := bson.M{
+		//"end_time":    m.Time,
+		"_updated_at": now,
+	}
+
+	if _, err := dbc.Upsert(bson.M{"_id": ID}, bson.M{
+		"$set": data,
+		"$push": bson.M{
+			"ids": SourceID,
+		},
+	}); err != nil {
+		log.Println(err)
+	}
 	fmt.Print("add alarm data")
 	return nil
 }
 func (s basicService) End(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+	now := time.Now()
+	data := bson.M{
+		//"end_time":    m.Time,
+		"_updated_at": now,
+	}
+
+	if _, err := dbc.Upsert(bson.M{"_id": ID}, bson.M{"$set": data}); err != nil {
+		log.Println(err)
+	}
 	fmt.Print("end alarm data")
 	return nil
 }
