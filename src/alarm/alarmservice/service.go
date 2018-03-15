@@ -11,10 +11,9 @@ import (
 
 // Service describes a service that adds things together.
 type Service interface {
-	Create(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (error)
-	Add(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (error)
-	End(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (error)
-
+	Create(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error)
+	Add(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error)
+	End(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error)
 }
 
 // New returns a basic Service with all of the expected middlewares wired in.
@@ -48,7 +47,7 @@ func NewBasicService() Service {
 type basicService struct{}
 
 
-func (s basicService) Create(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+func (s basicService) Create(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error){
 	now := time.Now()
 	data := bson.M{
 		"_id":          ID,
@@ -72,10 +71,9 @@ func (s basicService) Create(_ context.Context, ID string, FlowID uint32, Source
 	if err := dbc.Insert(data); err != nil {
 		log.Println(err)
 	}
-	fmt.Print("create alarm data")
-	return nil
+	return "create alarm data",nil
 }
-func (s basicService) Add(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+func (s basicService) Add(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error){
 	now := time.Now()
 	data := bson.M{
 		//"end_time":    m.Time,
@@ -91,9 +89,9 @@ func (s basicService) Add(_ context.Context, ID string, FlowID uint32, Source st
 		log.Println(err)
 	}
 	fmt.Print("add alarm data")
-	return nil
+	return "add alarm data",nil
 }
-func (s basicService) End(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) error{
+func (s basicService) End(_ context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string,error){
 	now := time.Now()
 	data := bson.M{
 		//"end_time":    m.Time,
@@ -104,5 +102,5 @@ func (s basicService) End(_ context.Context, ID string, FlowID uint32, Source st
 		log.Println(err)
 	}
 	fmt.Print("end alarm data")
-	return nil
+	return "end alarm data",nil
 }

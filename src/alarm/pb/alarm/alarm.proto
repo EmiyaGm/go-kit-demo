@@ -7,74 +7,55 @@ import "google/api/annotations.proto";
 // The Add service definition.
 service Add {
     // create 更新报警记录
-    rpc create (createRequest) returns (createReply){}
+    rpc Create (CreateRequest) returns (CreateReply){}
 
-    rpc add (addRequest) returns (addReply){}
+    rpc Add (AddRequest) returns (AddReply){}
 
-    rpc end (endRequest) returns (endReply){}
+    rpc End (EndRequest) returns (EndReply){}
 
 }
 
-message createRequest {
+message CreateRequest {
     string ID = 1;
     uint32 FlowID = 2;
     string Source = 3;
     string Type = 4;
-    message time{};
     string Strategy = 5;
     string Target = 6;
     string SourceID = 7;
-    message Location{
-        float lng = 1;
-        float lat = 2;
-    };
-    message Data{};
-
 }
 
-message createReply {
+message CreateReply {
     string v = 1;
     string err = 2;
 }
 
-message addRequest {
+message AddRequest {
     string ID = 1;
     uint32 FlowID = 2;
     string Source = 3;
     string Type = 4;
-    message time{};
     string Strategy = 5;
     string Target = 6;
     string SourceID = 7;
-    message Location{
-        float lng = 1;
-        float lat = 2;
-    };
-    message Data{};
 }
 
-message addReply {
+message AddReply {
     string v = 1;
     string err = 2;
 }
 
-message endRequest {
+message EndRequest {
     string ID = 1;
     uint32 FlowID = 2;
     string Source = 3;
     string Type = 4;
-    message time{};
     string Strategy = 5;
     string Target = 6;
     string SourceID = 7;
-    message Location{
-        float lng = 1;
-        float lat = 2;
-    };
-    message Data{};
 }
 
-message endReply{
+message EndReply{
     string v = 1;
     string err = 2;
 }

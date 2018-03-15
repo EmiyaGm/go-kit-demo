@@ -166,7 +166,7 @@ func encodeGRPCUppercaseRequest(_ context.Context, request interface{}) (interfa
 
 func decodeGRPCCreateRequest(_ context.Context, grpcReq interface{}) (interface{}, error) {
 	req := grpcReq.(*pb.CreateRequest)
-	return svcendpoint.CreateRequest{A: string(req.S)}, nil
+	return svcendpoint.CreateRequest{ID: string(req.ID)}, nil
 }
 
 
@@ -190,7 +190,7 @@ func encodeGRPCCreateResponse(_ context.Context, response interface{}) (interfac
 // user-domain uppercase request to a gRPC uppercase request. Primarily useful in a client.
 func encodeGRPCCreateRequest(_ context.Context, request interface{}) (interface{}, error) {
 	req := request.(svcendpoint.CreateRequest)
-	return &pb.CreateRequest{ID: string(req.A)}, nil
+	return &pb.CreateRequest{ID: string(req.ID)}, nil
 }
 
 

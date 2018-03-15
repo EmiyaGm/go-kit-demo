@@ -4,9 +4,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"net"
 	"flag"
-	pb "alarm/pb/alarm"
+	alarmpb "alarm/pb/alarm"
 	"google.golang.org/grpc"
-	stdopentracing "github.com/opentracing/opentracing-go"
 	"alarm/alarmservice"
 	"alarm/alarmtransport"
 	"alarm/alarmendpoint"
@@ -17,15 +16,11 @@ import (
 )
 
 const (
-	port = ":8081"
+	port = "0.0.0.0:8081"
 )
 
 func main() {
 	fs := flag.NewFlagSet("alarm", flag.ExitOnError)
-	var tracer stdopentracing.Tracer
-	{
-		tracer = stdopentracing.GlobalTracer() // no-op
-	}
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
@@ -33,8 +28,8 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 	var service = alarmservice.New()
-	var endpoints = alarmendpoint.New(service, tracer)
-	var grpcServer = alarmtransport.NewGRPCServer(endpoints, tracer, logger)
+	var endpoints = alarmendpoint.New(service)
+	var grpcServer = alarmtransport.NewGRPCServer(endpoints)
 	var grpcAddr = fs.String("grpc-addr", port, "gRPC listen address")
 	var g group.Group
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags]")
@@ -47,9 +42,8 @@ func main() {
 	g.Add(func() error {
 		logger.Log("transport", "gRPC", "addr", *grpcAddr)
 		// we add the Go Kit gRPC Interceptor to our gRPC service as it is used by
-		// the here demonstrated zipkin tracing middleware.
 		baseServer := grpc.NewServer()
-		pb.RegisterAddServer(baseServer, grpcServer)
+		alarmpb.RegisterAddServer(baseServer, grpcServer)
 		return baseServer.Serve(grpcListener)
 	}, func(error) {
 		grpcListener.Close()

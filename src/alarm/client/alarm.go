@@ -1,13 +1,17 @@
-package main
+package client
 
 import (
-	"log"
 	"os"
+	"flag"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	pb "alarm/pb/alarm"
 	"time"
+	"fmt"
+
+	"alarm/alarmservice"
+	"alarm/alarmtransport"
+	"text/tabwriter"
 )
 
 const (
@@ -17,7 +21,7 @@ const (
 	StrategyAdd = "add"
 	// StrategyCreate 创建
 	StrategyCreate = "create"
-	address     = "localhost:8081"
+	port = "0.0.0.0:8081"
 )
 
 // Message 报警消息
@@ -38,6 +42,11 @@ type Message struct {
 
 var message chan *Message
 
+// Init 初始化报警服务
+func Init() error {
+	message = make(chan *Message)
+	return nil
+}
 
 // Alarm 报警消息通道
 func Alarm() chan<- *Message {
@@ -46,44 +55,64 @@ func Alarm() chan<- *Message {
 
 // Run 运行报警服务
 func Run() {
+	fs := flag.NewFlagSet("alarmcli", flag.ExitOnError)
+	var grpcAddr = fs.String("grpc-addr", port, "gRPC address of alarmsvc")
+	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
+	fs.Parse(os.Args[1:])
+	var (
+		svc alarmservice.Service
+		err error
+	)
+	conn, err := grpc.Dial(*grpcAddr, grpc.WithInsecure())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+	svc = alarmtransport.NewGRPCClient(conn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 	for msg := range message {
-		conn, err := grpc.Dial(address, grpc.WithInsecure())
-		if err != nil {
-			log.Fatalf("did not connect: %v", err)
-		}
-		defer conn.Close()
-		c := pb.NewAddClient(conn)
 		switch msg.Strategy {
 		case StrategyAdd:
-			_ = "Add"
-			if len(os.Args) > 1 {
-				_ = os.Args[1]
-			}
-			r, err := c.Add(context.Background(), &pb.AddRequest{ID:msg.ID,FlowID:msg.FlowID,Source:msg.Source,Type:msg.Type,Strategy:msg.Strategy,Target:msg.Target,SourceID:msg.SourceID})
+			v,err:= svc.Add(context.Background(), string(msg.ID),uint32(msg.FlowID),string(msg.Source),string(msg.Type),string(msg.Strategy),string(msg.Target),string(msg.SourceID))
 			if err != nil {
-				log.Fatalf("could not greet: %v", err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				//os.Exit(1)
 			}
-			log.Printf("Create: %s", r.V)
+			fmt.Fprintf(os.Stdout, "%s\n", v)
 		case StrategyCreate:
-			_ = "Create"
-			if len(os.Args) > 1 {
-				_ = os.Args[1]
-			}
-			r, err := c.Create(context.Background(), &pb.CreateRequest{ID:msg.ID,FlowID:msg.FlowID,Source:msg.Source,Type:msg.Type,Strategy:msg.Strategy,Target:msg.Target,SourceID:msg.SourceID})
+			v,err:= svc.Create(context.Background(), string(msg.ID),uint32(msg.FlowID),string(msg.Source),string(msg.Type),string(msg.Strategy),string(msg.Target),string(msg.SourceID))
+			panic(err)
 			if err != nil {
-				log.Fatalf("could not greet: %v", err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				//os.Exit(1)
 			}
-			log.Printf("Create: %s", r.V)
+			fmt.Fprintf(os.Stdout, "%s\n", v)
 		case StrategyEnd:
-			_ = "End"
-			if len(os.Args) > 1 {
-				_ = os.Args[1]
-			}
-			r, err := c.End(context.Background(), &pb.EndRequest{ID:msg.ID,FlowID:msg.FlowID,Source:msg.Source,Type:msg.Type,Strategy:msg.Strategy,Target:msg.Target,SourceID:msg.SourceID})
+			v,err:= svc.End(context.Background(), string(msg.ID),uint32(msg.FlowID),string(msg.Source),string(msg.Type),string(msg.Strategy),string(msg.Target),string(msg.SourceID))
 			if err != nil {
-				log.Fatalf("could not greet: %v", err)
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				//os.Exit(1)
 			}
-			log.Printf("Create: %s", r.V)
+			fmt.Fprintf(os.Stdout, "%s\n", v)
 		}
+	}
+}
+
+func usageFor(fs *flag.FlagSet, short string) func() {
+	return func() {
+		fmt.Fprintf(os.Stderr, "USAGE\n")
+		fmt.Fprintf(os.Stderr, "  %s\n", short)
+		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(os.Stderr, "FLAGS\n")
+		w := tabwriter.NewWriter(os.Stderr, 0, 2, 2, ' ', 0)
+		fs.VisitAll(func(f *flag.Flag) {
+			fmt.Fprintf(w, "\t-%s %s\t%s\n", f.Name, f.DefValue, f.Usage)
+		})
+		w.Flush()
+		fmt.Fprintf(os.Stderr, "\n")
 	}
 }

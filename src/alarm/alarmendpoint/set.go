@@ -6,13 +6,11 @@ import (
 
 	"golang.org/x/time/rate"
 
-	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/sony/gobreaker"
 
 	"github.com/go-kit/kit/circuitbreaker"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/ratelimit"
-	"github.com/go-kit/kit/tracing/opentracing"
 
 	"alarm/alarmservice"
 	"fmt"
@@ -30,27 +28,24 @@ type Set struct {
 
 // New returns a Set that wraps the provided server, and wires in all of the
 // expected endpoint middlewares via the various parameters.
-func New(svc alarmservice.Service, trace stdopentracing.Tracer) Set {
+func New(svc alarmservice.Service) Set {
 	var createEndpoint endpoint.Endpoint
 	{
 		createEndpoint = MakeCreateEndpoint(svc)
 		createEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(createEndpoint)
 		createEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(createEndpoint)
-		createEndpoint = opentracing.TraceServer(trace, "Create")(createEndpoint)
 	}
 	var addEndpoint endpoint.Endpoint
 	{
 		addEndpoint = MakeAddEndpoint(svc)
 		addEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(addEndpoint)
 		addEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(addEndpoint)
-		addEndpoint = opentracing.TraceServer(trace, "Add")(addEndpoint)
 	}
 	var endEndpoint endpoint.Endpoint
 	{
 		endEndpoint = MakeEndEndpoint(svc)
 		endEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 1))(endEndpoint)
 		endEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(endEndpoint)
-		endEndpoint = opentracing.TraceServer(trace, "End")(endEndpoint)
 	}
 	return Set{
 		CreateEndpoint:    createEndpoint,
@@ -61,10 +56,9 @@ func New(svc alarmservice.Service, trace stdopentracing.Tracer) Set {
 
 
 func (s Set) Create(ctx context.Context, ID string, FlowID uint32, Source string, Type string, Strategy string, Target string, SourceID string) (string, error){
-	fmt.Print("create alarm data")
 	resp, err := s.CreateEndpoint(ctx, CreateRequest{ID: ID,FlowID: FlowID,Source: Source,Type: Type,Strategy: Strategy,Target: Target,SourceID: SourceID})
 	if err != nil {
-		return "", err
+		return "create", err
 	}
 	response := resp.(CreateResponse)
 	return response.V, response.Err
@@ -74,7 +68,7 @@ func (s Set) Add(ctx context.Context, ID string, FlowID uint32, Source string, T
 	fmt.Print("add alarm data")
 	resp, err := s.AddEndpoint(ctx, AddRequest{ID: ID,FlowID: FlowID,Source: Source,Type: Type,Strategy: Strategy,Target: Target,SourceID: SourceID})
 	if err != nil {
-		return "", err
+		return "add", err
 	}
 	response := resp.(AddResponse)
 	return response.V, response.Err
@@ -84,7 +78,7 @@ func (s Set) End(ctx context.Context, ID string, FlowID uint32, Source string, T
 	fmt.Print("end alarm data")
 	resp, err := s.EndEndpoint(ctx, AddRequest{ID: ID,FlowID: FlowID,Source: Source,Type: Type,Strategy: Strategy,Target: Target,SourceID: SourceID})
 	if err != nil {
-		return "", err
+		return "end", err
 	}
 	response := resp.(EndResponse)
 	return response.V, response.Err
@@ -93,24 +87,24 @@ func (s Set) End(ctx context.Context, ID string, FlowID uint32, Source string, T
 func MakeCreateEndpoint(s alarmservice.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(CreateRequest)
-		err = s.Create(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
-		return CreateResponse{V:"create alarm data", Err: err}, nil
+		v,err := s.Create(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
+		return CreateResponse{V:v, Err: err}, nil
 	}
 }
 
 func MakeAddEndpoint(s alarmservice.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(AddRequest)
-		err = s.Add(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
-		return AddResponse{V:"add alarm data", Err: err}, nil
+		v,err := s.Add(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
+		return AddResponse{V:v, Err: err}, nil
 	}
 }
 
 func MakeEndEndpoint(s alarmservice.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(EndRequest)
-		err = s.End(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
-		return EndResponse{V:"end alarm data", Err: err}, nil
+		v,err := s.End(ctx, req.ID, req.FlowID, req.Source, req.Type,req.Strategy,req.Target,req.SourceID)
+		return EndResponse{V:v, Err: err}, nil
 	}
 }
 
@@ -120,33 +114,33 @@ type Failer interface {
 
 
 type CreateRequest struct {
-	ID string `json:"ID"`
-	FlowID uint32 `json:"FlowID"`
-	Source string `json:"Source"`
-	Type string `json:"Type"`
-	Strategy string `json:"Strategy"`
-	Target string `json:"Target"`
-	SourceID string `json:"SourceID"`
+	ID string
+	FlowID uint32
+	Source string
+	Type string
+	Strategy string
+	Target string
+	SourceID string
 }
 
 type AddRequest struct {
-	ID string `json:"ID"`
-	FlowID uint32 `json:"FlowID"`
-	Source string `json:"Source"`
-	Type string `json:"Type"`
-	Strategy string `json:"Strategy"`
-	Target string `json:"Target"`
-	SourceID string `json:"SourceID"`
+	ID string
+	FlowID uint32
+	Source string
+	Type string
+	Strategy string
+	Target string
+	SourceID string
 }
 
 type EndRequest struct {
-	ID string `json:"ID"`
-	FlowID uint32 `json:"FlowID"`
-	Source string `json:"Source"`
-	Type string `json:"Type"`
-	Strategy string `json:"Strategy"`
-	Target string `json:"Target"`
-	SourceID string `json:"SourceID"`
+	ID string
+	FlowID uint32
+	Source string
+	Type string
+	Strategy string
+	Target string
+	SourceID string
 }
 
 type CreateResponse struct {
